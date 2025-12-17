@@ -23,6 +23,7 @@ class Room:
         self.players = [host_player]
         self.status = "waiting"  # waiting, playing, finished
         self.game_server_process = None
+        self.server_port = None  # 實際運行的埠口
         self.created_at = time.time()
         
     def add_player(self, player):
@@ -485,22 +486,51 @@ class LobbyServer:
             # 如果遊戲已開始，返回伺服器資訊
             if room.status == "playing":
                 response["server_info"] = {
-                    "host": self.host if self.host != '0.0.0.0' else 'localhost',
-                    "port": room.game_info["server_port"],
+                    "host": self.get_host_ip(),
+                    "port": room.server_port,
                     "game_name": room.game_info["name"],
                     "game_type": room.game_info["type"]
                 }
             
             return response
     
+    def get_host_ip(self):
+        """取得本機 IP"""
+        if self.host != '0.0.0.0':
+            return self.host
+        try:
+            # 建立一個 UDP socket 連線到外部 IP (不會真的發送封包)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return '127.0.0.1'
+
+    def get_free_port(self):
+        """取得可用埠口"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+        except:
+            return 0
+
     def start_game_server(self, room):
         """啟動遊戲伺服器"""
         game_info = room.game_info
         game_dir = os.path.abspath(f"uploaded_games/{game_info['name']}/{game_info['version']}")
         server_file_name = game_info.get("server_file", "game_server.py")
         
-        # 啟動遊戲伺服器進程
-        port = game_info["server_port"]
+        # 動態分配埠口
+        port = self.get_free_port()
+        if port == 0:
+            # 如果動態分配失敗，回退到設定檔的埠口（可能會衝突）
+            port = game_info["server_port"]
+            print(f"[大廳伺服器] 警告：無法動態分配埠口，使用預設埠口 {port}")
         
         try:
             process = subprocess.Popen(
@@ -508,10 +538,14 @@ class LobbyServer:
                 cwd=game_dir
             )
             room.game_server_process = process
+            room.server_port = port
             print(f"[大廳伺服器] 遊戲伺服器已啟動 (PID: {process.pid}, Port: {port})")
             
+            # 取得正確的 IP 地址
+            host_ip = self.get_host_ip()
+            
             return {
-                "host": self.host if self.host != '0.0.0.0' else 'localhost',
+                "host": host_ip,
                 "port": port,
                 "game_name": game_info["name"],
                 "game_type": game_info["type"]
