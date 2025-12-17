@@ -7,9 +7,10 @@ echo "=========================================="
 
 cd "$(dirname "$0")"
 
-# 檢查 Python
-if ! command -v python3 &> /dev/null; then
-    echo "❌ 錯誤：找不到 Python3"
+# 檢查 uv
+if ! command -v uv &> /dev/null; then
+    echo "❌ 錯誤：找不到 uv"
+    echo "請先安裝 uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
     exit 1
 fi
 
@@ -19,13 +20,13 @@ echo ""
 
 # 啟動開發者伺服器
 echo "[1/2] 啟動開發者伺服器 (埠口 6001)..."
-python3 server/developer_server.py 0.0.0.0 6001 &
+uv run python3 server/developer_server.py 0.0.0.0 6001 &
 DEV_SERVER_PID=$!
 sleep 1
 
 # 啟動大廳伺服器
 echo "[2/2] 啟動大廳伺服器 (埠口 6002)..."
-python3 server/lobby_server.py 0.0.0.0 6002 &
+uv run python3 server/lobby_server.py 0.0.0.0 6002 &
 LOBBY_SERVER_PID=$!
 sleep 1
 
