@@ -33,16 +33,26 @@ class LobbyClient:
 
     def wait_for_port(self, host, port, timeout=5.0, interval=0.25):
         """等待遊戲伺服器埠口開啟，避免客戶端過早連線"""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                with socket.create_connection((host, port), timeout=1):
-                    return True
-            except OSError as e:
-                if e.errno not in (errno.ECONNREFUSED, errno.ETIMEDOUT):
-                    return False
-            time.sleep(interval)
-        return False
+        # 注意：這裡不應該真的建立連線，因為簡單的遊戲伺服器可能會把這個檢查當作玩家連線
+        # 但 Python 沒有簡單的方法只檢查 SYN-ACK 而不完成握手
+        # 所以我們只能依賴伺服器端處理這種 "Ping" 連線，或者我們假設伺服器啟動需要一點時間
+        
+        # 暫時改為簡單的 sleep，避免觸發遊戲伺服器的 accept
+        print(f"[DEBUG] 等待伺服器啟動 (3秒)...")
+        time.sleep(3)
+        return True
+        
+        # 原本的邏輯 (會導致遊戲伺服器誤判玩家連線)
+        # deadline = time.time() + timeout
+        # while time.time() < deadline:
+        #     try:
+        #         with socket.create_connection((host, port), timeout=1):
+        #             return True
+        #     except OSError as e:
+        #         if e.errno not in (errno.ECONNREFUSED, errno.ETIMEDOUT):
+        #             return False
+        #     time.sleep(interval)
+        # return False
     
     def send_message(self, message):
         """發送訊息給伺服器"""

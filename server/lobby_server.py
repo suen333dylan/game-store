@@ -141,20 +141,7 @@ class LobbyServer:
                 if player_info:
                     try:
                         sock = player_info["socket"]
-                        
-                        # 如果訊息包含 server_info，根據玩家 IP 調整 host
-                        msg_to_send = message
-                        if "server_info" in message:
-                            msg_to_send = message.copy()
-                            server_info = msg_to_send["server_info"].copy()
-                            
-                            player_ip = player_info["addr"][0]
-                            if player_ip == "127.0.0.1" or player_ip == "localhost":
-                                server_info["host"] = "127.0.0.1"
-                            
-                            msg_to_send["server_info"] = server_info
-                        
-                        sock.send(json.dumps(msg_to_send).encode('utf-8'))
+                        sock.send(json.dumps(message).encode('utf-8'))
                     except Exception as e:
                         print(f"[大廳伺服器] 發送廣播失敗: {e}")
 
@@ -173,7 +160,7 @@ class LobbyServer:
                 if msg_type == "register":
                     response = self.handle_register(message)
                 elif msg_type == "login":
-                    response = self.handle_login(message, client_socket, addr)
+                    response = self.handle_login(message, client_socket)
                     if response["success"]:
                         player_id = response["player"]["id"]
                 elif msg_type == "list_games":
@@ -223,7 +210,7 @@ class LobbyServer:
         success, msg = self.db.register_player(username, password)
         return {"success": success, "message": msg}
     
-    def handle_login(self, message, client_socket, addr):
+    def handle_login(self, message, client_socket):
         """處理登入請求"""
         username = message.get("username")
         password = message.get("password")
@@ -239,8 +226,7 @@ class LobbyServer:
                     return {"success": False, "message": "該帳號已在線上，請先登出後再登入"}
                 self.online_players[result["id"]] = {
                     "socket": client_socket,
-                    "username": result["username"],
-                    "addr": addr
+                    "username": result["username"]
                 }
             return {"success": True, "player": result}
         else:
@@ -486,18 +472,10 @@ class LobbyServer:
             "server_info": game_server_info
         }, exclude_player_id=player_id)
         
-        # 調整回傳給房主的 server_info
-        response_server_info = game_server_info.copy()
-        player_info = self.online_players.get(player_id)
-        if player_info:
-            player_ip = player_info["addr"][0]
-            if player_ip == "127.0.0.1" or player_ip == "localhost":
-                response_server_info["host"] = "127.0.0.1"
-        
         return {
             "success": True,
             "message": "遊戲伺服器已啟動",
-            "server_info": response_server_info
+            "server_info": game_server_info
         }
     
     def handle_get_room_status(self, player_id):
@@ -525,13 +503,6 @@ class LobbyServer:
                 host_ip = self.host
                 if host_ip == '0.0.0.0':
                     host_ip = get_local_ip()
-                
-                # 根據玩家連線來源調整 IP
-                player_info = self.online_players.get(player_id)
-                if player_info:
-                    player_ip = player_info["addr"][0]
-                    if player_ip == "127.0.0.1" or player_ip == "localhost":
-                        host_ip = "127.0.0.1"
                     
                 response["server_info"] = {
                     "host": host_ip,

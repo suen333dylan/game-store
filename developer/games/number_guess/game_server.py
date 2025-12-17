@@ -24,14 +24,25 @@ class NumberGuessServer:
         print(f"[猜數字對戰伺服器] 在埠口 {self.port} 上啟動")
         
         # 等待兩位玩家連線
-        for i in range(2):
-            client_socket, addr = self.server_socket.accept()
-            self.clients.append(client_socket)
-            print(f"[猜數字對戰伺服器] 玩家 {i+1} 已連線")
-            client_socket.sendall(json.dumps({
-                "type": "connected",
-                "player_id": i
-            }).encode())
+        connected_count = 0
+        while connected_count < 2:
+            try:
+                client_socket, addr = self.server_socket.accept()
+                self.clients.append(client_socket)
+                print(f"[猜數字對戰伺服器] 玩家 {connected_count+1} 已連線")
+                
+                try:
+                    client_socket.sendall(json.dumps({
+                        "type": "connected",
+                        "player_id": connected_count
+                    }).encode())
+                    connected_count += 1
+                except socket.error:
+                    print(f"[猜數字對戰伺服器] 玩家連線中斷")
+                    self.clients.remove(client_socket)
+                    client_socket.close()
+            except Exception as e:
+                print(f"[猜數字對戰伺服器] 接受連線錯誤: {e}")
         
         print("[猜數字對戰伺服器] 遊戲開始！")
         self.run_game()

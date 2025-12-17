@@ -36,9 +36,27 @@ class RockPaperScissorsServer:
                 try:
                     client_socket, addr = self.server_socket.accept()
                     
-                    # 接收玩家名稱
-                    data = client_socket.recv(4096).decode()
-                    message = json.loads(data)
+                    # 簡單的握手檢查
+                    client_socket.settimeout(2.0)
+                    try:
+                        # 接收玩家名稱
+                        data = client_socket.recv(4096).decode()
+                        if not data:
+                            client_socket.close()
+                            continue
+                    except socket.error:
+                        print(f"[石頭剪刀布伺服器] 忽略不穩定的連線: {addr}")
+                        client_socket.close()
+                        continue
+                    
+                    client_socket.settimeout(None)
+                    
+                    try:
+                        message = json.loads(data)
+                    except:
+                        print(f"[石頭剪刀布伺服器] 無效的 JSON 數據")
+                        client_socket.close()
+                        continue
                     
                     if message["type"] == "join":
                         player_name = message.get("name", f"Player{len(self.clients)+1}")

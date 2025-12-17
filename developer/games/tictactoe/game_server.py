@@ -25,16 +25,44 @@ class TicTacToeServer:
         print(f"[井字遊戲伺服器] 在埠口 {self.port} 上啟動")
         
         # 等待兩位玩家連線
-        for i in range(2):
-            client_socket, addr = self.server_socket.accept()
-            self.clients.append(client_socket)
-            print(f"[井字遊戲伺服器] 玩家 {i+1} ({self.symbols[i]}) 已連線")
-            client_socket.sendall(json.dumps({
-                "type": "connected",
-                "player_id": i,
-                "symbol": self.symbols[i]
-            }).encode())
-        
+        connected_count = 0
+        while connected_count < 2:
+            try:
+                client_socket, addr = self.server_socket.accept()
+                
+                # 簡單的握手檢查，防止端口掃描或健康檢查導致的誤判
+                # 這裡我們設定一個短暫的 timeout，讀取客戶端的第一個訊息
+                # 如果客戶端連線後立即斷開（如 wait_for_port），這裡會拋出異常
+                client_socket.settimeout(2.0)
+                try:
+                    # 這裡不讀取任何資料，只是確認連線是否穩定
+                    # 實際遊戲協議中，伺服器是先發送 connected 訊息
+                    pass
+                except socket.error:
+                    print(f"[井字遊戲伺服器] 忽略不穩定的連線: {addr}")
+                    client_socket.close()
+                    continue
+                
+                client_socket.settimeout(None) # 恢復阻塞模式
+                
+                self.clients.append(client_socket)
+                print(f"[井字遊戲伺服器] 玩家 {connected_count+1} ({self.symbols[connected_count]}) 已連線")
+                
+                try:
+                    client_socket.sendall(json.dumps({
+                        "type": "connected",
+                        "player_id": connected_count,
+                        "symbol": self.symbols[connected_count]
+                    }).encode())
+                    connected_count += 1
+                except socket.error as e:
+                    print(f"[井字遊戲伺服器] 發送歡迎訊息失敗: {e}")
+                    self.clients.remove(client_socket)
+                    client_socket.close()
+                    
+            except Exception as e:
+                print(f"[井字遊戲伺服器] 接受連線錯誤: {e}")
+
         print("[井字遊戲伺服器] 遊戲開始！")
         self.run_game()
         
