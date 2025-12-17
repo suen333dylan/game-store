@@ -82,8 +82,16 @@ class TicTacToeServer:
             try:
                 print(f"[DEBUG] 等待玩家 {self.current_player} 下棋...")
                 data = self.clients[self.current_player].recv(4096).decode()
+                if not data:
+                    print(f"[DEBUG] 玩家 {self.current_player} 斷開連線")
+                    break
+                    
                 print(f"[DEBUG] 收到玩家 {self.current_player} 的數據: {data[:100]}...")
-                move = json.loads(data)
+                try:
+                    move = json.loads(data)
+                except json.JSONDecodeError:
+                    print(f"[錯誤] JSON 解析失敗: {data}")
+                    continue
                 
                 if move["type"] == "move":
                     row, col = move["row"], move["col"]

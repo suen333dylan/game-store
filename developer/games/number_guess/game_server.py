@@ -47,7 +47,16 @@ class NumberGuessServer:
             }).encode())
             
             data = self.clients[i].recv(4096).decode()
-            message = json.loads(data)
+            if not data:
+                print(f"[猜數字對戰伺服器] 玩家 {i+1} 斷開連線")
+                return
+                
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                print(f"[錯誤] JSON 解析失敗: {data}")
+                return
+                
             if message["type"] == "number_set":
                 self.player_numbers[i] = message["number"]
                 print(f"[猜數字對戰伺服器] 玩家 {i+1} 已設定數字")
@@ -79,7 +88,15 @@ class NumberGuessServer:
             try:
                 # 接收猜測
                 data = self.clients[current_player].recv(4096).decode()
-                message = json.loads(data)
+                if not data:
+                    print(f"[猜數字對戰伺服器] 玩家 {current_player} 斷開連線")
+                    break
+                    
+                try:
+                    message = json.loads(data)
+                except json.JSONDecodeError:
+                    print(f"[錯誤] JSON 解析失敗: {data}")
+                    continue
                 
                 if message["type"] == "guess":
                     guess = message["number"]

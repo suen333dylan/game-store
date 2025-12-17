@@ -53,9 +53,24 @@ class TicTacToeClient:
     def connect(self):
         """連線到遊戲伺服器"""
         print(f"[DEBUG] 正在連線到 {self.host}:{self.port}...")
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.host, self.port))
-        print("[DEBUG] 連線成功，等待伺服器確認...")
+        
+        # 嘗試連線 5 次
+        for i in range(5):
+            try:
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.socket.connect((self.host, self.port))
+                print("[DEBUG] 連線成功，等待伺服器確認...")
+                break
+            except ConnectionRefusedError:
+                print(f"[DEBUG] 連線被拒 (嘗試 {i+1}/5)，等待 1 秒後重試...")
+                import time
+                time.sleep(1)
+            except Exception as e:
+                print(f"❌ 連線錯誤: {e}")
+                return False
+        else:
+            print("❌ 無法連線到遊戲伺服器 (重試次數過多)")
+            return False
         
         # 接收連線確認
         message = self.receive_message()

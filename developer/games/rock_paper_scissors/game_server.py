@@ -135,7 +135,15 @@ class RockPaperScissorsServer:
             for player_id in range(len(self.clients)):
                 try:
                     data = self.clients[player_id].recv(4096).decode()
-                    message = json.loads(data)
+                    if not data:
+                        raise ConnectionError("連線中斷")
+                    
+                    try:
+                        message = json.loads(data)
+                    except json.JSONDecodeError:
+                        print(f"[錯誤] JSON 解析失敗: {data}")
+                        self.choices[player_id] = "rock"
+                        continue
                     
                     if message["type"] == "choice":
                         self.choices[player_id] = message["choice"]

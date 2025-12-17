@@ -13,6 +13,17 @@ import time
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from database import Database
 
+def get_local_ip():
+    """獲取本機區域網路 IP"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
 class Room:
     """房間類別"""
     def __init__(self, room_id, game_id, game_info, host_player):
@@ -23,7 +34,7 @@ class Room:
         self.players = [host_player]
         self.status = "waiting"  # waiting, playing, finished
         self.game_server_process = None
-        self.server_port = None  # 實際運行的埠口
+        self.port = None  # 分配的遊戲伺服器埠口
         self.created_at = time.time()
         
     def add_player(self, player):
@@ -70,6 +81,7 @@ class LobbyServer:
         self.next_room_id = 1
         self.online_players = {}  # {player_id: socket}
         self.player_rooms = {}  # {player_id: room_id}
+        self.used_ports = set()  # 已使用的遊戲埠口
         self.lock = threading.RLock()
         
     def start(self):
@@ -129,7 +141,20 @@ class LobbyServer:
                 if player_info:
                     try:
                         sock = player_info["socket"]
-                        sock.send(json.dumps(message).encode('utf-8'))
+                        
+                        # 如果訊息包含 server_info，根據玩家 IP 調整 host
+                        msg_to_send = message
+                        if "server_info" in message:
+                            msg_to_send = message.copy()
+                            server_info = msg_to_send["server_info"].copy()
+                            
+                            player_ip = player_info["addr"][0]
+                            if player_ip == "127.0.0.1" or player_ip == "localhost":
+                                server_info["host"] = "127.0.0.1"
+                            
+                            msg_to_send["server_info"] = server_info
+                        
+                        sock.send(json.dumps(msg_to_send).encode('utf-8'))
                     except Exception as e:
                         print(f"[大廳伺服器] 發送廣播失敗: {e}")
 
@@ -148,7 +173,7 @@ class LobbyServer:
                 if msg_type == "register":
                     response = self.handle_register(message)
                 elif msg_type == "login":
-                    response = self.handle_login(message, client_socket)
+                    response = self.handle_login(message, client_socket, addr)
                     if response["success"]:
                         player_id = response["player"]["id"]
                 elif msg_type == "list_games":
@@ -198,7 +223,7 @@ class LobbyServer:
         success, msg = self.db.register_player(username, password)
         return {"success": success, "message": msg}
     
-    def handle_login(self, message, client_socket):
+    def handle_login(self, message, client_socket, addr):
         """處理登入請求"""
         username = message.get("username")
         password = message.get("password")
@@ -214,7 +239,8 @@ class LobbyServer:
                     return {"success": False, "message": "該帳號已在線上，請先登出後再登入"}
                 self.online_players[result["id"]] = {
                     "socket": client_socket,
-                    "username": result["username"]
+                    "username": result["username"],
+                    "addr": addr
                 }
             return {"success": True, "player": result}
         else:
@@ -401,6 +427,9 @@ class LobbyServer:
                         except:
                             pass
                 
+                if room.port:
+                    self.release_port(room.port)
+                
                 del self.rooms[room_id]
                 print(f"[大廳伺服器] 房間 {room_id} 已關閉（無玩家）")
                 return {"success": True, "message": "已離開房間"}
@@ -457,10 +486,18 @@ class LobbyServer:
             "server_info": game_server_info
         }, exclude_player_id=player_id)
         
+        # 調整回傳給房主的 server_info
+        response_server_info = game_server_info.copy()
+        player_info = self.online_players.get(player_id)
+        if player_info:
+            player_ip = player_info["addr"][0]
+            if player_ip == "127.0.0.1" or player_ip == "localhost":
+                response_server_info["host"] = "127.0.0.1"
+        
         return {
             "success": True,
             "message": "遊戲伺服器已啟動",
-            "server_info": game_server_info
+            "server_info": response_server_info
         }
     
     def handle_get_room_status(self, player_id):
@@ -485,39 +522,42 @@ class LobbyServer:
             
             # 如果遊戲已開始，返回伺服器資訊
             if room.status == "playing":
+                host_ip = self.host
+                if host_ip == '0.0.0.0':
+                    host_ip = get_local_ip()
+                
+                # 根據玩家連線來源調整 IP
+                player_info = self.online_players.get(player_id)
+                if player_info:
+                    player_ip = player_info["addr"][0]
+                    if player_ip == "127.0.0.1" or player_ip == "localhost":
+                        host_ip = "127.0.0.1"
+                    
                 response["server_info"] = {
-                    "host": self.get_host_ip(),
-                    "port": room.server_port,
+                    "host": host_ip,
+                    "port": room.port if room.port else room.game_info["server_port"],
                     "game_name": room.game_info["name"],
                     "game_type": room.game_info["type"]
                 }
             
             return response
     
-    def get_host_ip(self):
-        """取得本機 IP"""
-        if self.host != '0.0.0.0':
-            return self.host
-        try:
-            # 建立一個 UDP socket 連線到外部 IP (不會真的發送封包)
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('8.8.8.8', 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except:
-            return '127.0.0.1'
-
     def get_free_port(self):
-        """取得可用埠口"""
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('', 0))
-                s.listen(1)
-                port = s.getsockname()[1]
-            return port
-        except:
-            return 0
+        """獲取可用的遊戲埠口"""
+        # 使用 7000-8000 範圍
+        for port in range(7000, 8000):
+            if port not in self.used_ports:
+                # 檢查埠口是否真的可用
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    if s.connect_ex(('localhost', port)) != 0:
+                        self.used_ports.add(port)
+                        return port
+        return None
+
+    def release_port(self, port):
+        """釋放遊戲埠口"""
+        if port in self.used_ports:
+            self.used_ports.remove(port)
 
     def start_game_server(self, room):
         """啟動遊戲伺服器"""
@@ -525,12 +565,13 @@ class LobbyServer:
         game_dir = os.path.abspath(f"uploaded_games/{game_info['name']}/{game_info['version']}")
         server_file_name = game_info.get("server_file", "game_server.py")
         
-        # 動態分配埠口
+        # 分配埠口
         port = self.get_free_port()
-        if port == 0:
-            # 如果動態分配失敗，回退到設定檔的埠口（可能會衝突）
-            port = game_info["server_port"]
-            print(f"[大廳伺服器] 警告：無法動態分配埠口，使用預設埠口 {port}")
+        if not port:
+            print("[大廳伺服器] 無法分配埠口")
+            return None
+            
+        room.port = port
         
         try:
             process = subprocess.Popen(
@@ -538,11 +579,13 @@ class LobbyServer:
                 cwd=game_dir
             )
             room.game_server_process = process
-            room.server_port = port
             print(f"[大廳伺服器] 遊戲伺服器已啟動 (PID: {process.pid}, Port: {port})")
             
-            # 取得正確的 IP 地址
-            host_ip = self.get_host_ip()
+            # 決定回傳給客戶端的 IP
+            # 如果大廳綁定 0.0.0.0，則嘗試獲取真實 IP
+            host_ip = self.host
+            if host_ip == '0.0.0.0':
+                host_ip = get_local_ip()
             
             return {
                 "host": host_ip,
@@ -552,6 +595,8 @@ class LobbyServer:
             }
         except Exception as e:
             print(f"[大廳伺服器] 啟動遊戲伺服器失敗: {e}")
+            self.release_port(port)
+            room.port = None
             return None
     
     def handle_add_rating(self, message, player_id):
@@ -606,6 +651,10 @@ class LobbyServer:
                                     room.game_server_process.kill()
                                 except:
                                     pass
+                        
+                        if room.port:
+                            self.release_port(room.port)
+                            
                         del self.rooms[room_id]
                     else:
                         if is_host:

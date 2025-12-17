@@ -92,9 +92,21 @@ class NumberGuessClient:
     def connect(self):
         """連線到遊戲伺服器"""
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.host, self.port))
-            
+            # 嘗試連線 5 次
+            for i in range(5):
+                try:
+                    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.socket.connect((self.host, self.port))
+                    break
+                except ConnectionRefusedError:
+                    print(f"[DEBUG] 連線被拒 (嘗試 {i+1}/5)，等待 1 秒後重試...")
+                    import time
+                    time.sleep(1)
+            else:
+                messagebox.showerror("錯誤", "無法連線到遊戲伺服器")
+                self.root.destroy()
+                return
+
             # 接收連線確認
             data = self.socket.recv(4096).decode()
             message = json.loads(data)
