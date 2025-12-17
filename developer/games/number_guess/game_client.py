@@ -163,61 +163,74 @@ class NumberGuessClient:
         
     def handle_messages(self):
         """處理來自伺服器的訊息"""
+        buffer = ""
+        decoder = json.JSONDecoder()
         while True:
             try:
                 data = self.socket.recv(4096).decode()
                 if not data:
                     break
                     
-                message = json.loads(data)
+                buffer += data
                 
-                if message["type"] == "set_number":
-                    # 已在 GUI 初始化時處理
-                    pass
-                    
-                elif message["type"] == "start_guessing":
-                    self.root.after(0, lambda: self.guess_frame.pack(pady=20))
-                    self.root.after(0, lambda: self.status_label.config(
-                        text="遊戲開始！輪流猜測對手的數字", fg="#2ecc71"))
-                    
-                elif message["type"] == "your_turn":
-                    self.guesses = message["guesses"]
-                    self.root.after(0, lambda: self.guesses_label.config(
-                        text=f"猜測次數: {self.guesses}"))
-                    self.root.after(0, lambda: self.status_label.config(
-                        text="輪到你了！請猜測對手的數字", fg="#3498db"))
-                    self.root.after(0, lambda: self.guess_button.config(state=tk.NORMAL))
-                    
-                elif message["type"] == "wait":
-                    self.root.after(0, lambda: self.status_label.config(
-                        text=message["message"], fg="#95a5a6"))
-                    
-                elif message["type"] == "hint":
-                    hint = message["hint"]
-                    msg = message["message"]
-                    self.root.after(0, lambda: self.add_history(f"  → {msg}"))
-                    
-                elif message["type"] == "game_over":
-                    winner = message["winner"]
-                    numbers = message["target_numbers"]
-                    guesses = message["guesses"]
-                    
-                    if winner == self.player_id:
-                        result = "🎉 你贏了！🎉"
-                        color = "#27ae60"
-                    else:
-                        result = "😢 你輸了！"
-                        color = "#e74c3c"
-                    
-                    details = f"\n玩家1的數字: {numbers[0]}, 猜了 {guesses[0]} 次\n"
-                    details += f"玩家2的數字: {numbers[1]}, 猜了 {guesses[1]} 次"
-                    
-                    self.root.after(0, lambda: self.status_label.config(
-                        text=result, fg=color))
-                    self.root.after(0, lambda: messagebox.showinfo(
-                        "遊戲結束", result + details))
-                    self.root.after(0, lambda: self.guess_button.config(state=tk.DISABLED))
-                    break
+                while buffer:
+                    try:
+                        buffer = buffer.lstrip()
+                        if not buffer:
+                            break
+                        message, index = decoder.raw_decode(buffer)
+                        buffer = buffer[index:]
+                
+                        if message["type"] == "set_number":
+                            # 已在 GUI 初始化時處理
+                            pass
+                            
+                        elif message["type"] == "start_guessing":
+                            self.root.after(0, lambda: self.guess_frame.pack(pady=20, before=self.status_label))
+                            self.root.after(0, lambda: self.status_label.config(
+                                text="遊戲開始！輪流猜測對手的數字", fg="#2ecc71"))
+                            
+                        elif message["type"] == "your_turn":
+                            self.guesses = message["guesses"]
+                            self.root.after(0, lambda: self.guesses_label.config(
+                                text=f"猜測次數: {self.guesses}"))
+                            self.root.after(0, lambda: self.status_label.config(
+                                text="輪到你了！請猜測對手的數字", fg="#3498db"))
+                            self.root.after(0, lambda: self.guess_button.config(state=tk.NORMAL))
+                            
+                        elif message["type"] == "wait":
+                            self.root.after(0, lambda: self.status_label.config(
+                                text=message["message"], fg="#95a5a6"))
+                            
+                        elif message["type"] == "hint":
+                            hint = message["hint"]
+                            msg = message["message"]
+                            self.root.after(0, lambda: self.add_history(f"  → {msg}"))
+                            
+                        elif message["type"] == "game_over":
+                            winner = message["winner"]
+                            numbers = message["target_numbers"]
+                            guesses = message["guesses"]
+                            
+                            if winner == self.player_id:
+                                result = "🎉 你贏了！🎉"
+                                color = "#27ae60"
+                            else:
+                                result = "😢 你輸了！"
+                                color = "#e74c3c"
+                            
+                            details = f"\n玩家1的數字: {numbers[0]}, 猜了 {guesses[0]} 次\n"
+                            details += f"玩家2的數字: {numbers[1]}, 猜了 {guesses[1]} 次"
+                            
+                            self.root.after(0, lambda: self.status_label.config(
+                                text=result, fg=color))
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "遊戲結束", result + details))
+                            self.root.after(0, lambda: self.guess_button.config(state=tk.DISABLED))
+                            return
+                            
+                    except json.JSONDecodeError:
+                        break
                     
             except Exception as e:
                 print(f"[錯誤] {e}")

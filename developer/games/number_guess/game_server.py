@@ -11,6 +11,7 @@ class NumberGuessServer:
     def __init__(self, port):
         self.port = port
         self.clients = []
+        self.buffers = []
         self.player_numbers = [None, None]  # 每位玩家設定的數字
         self.player_guesses = [0, 0]  # 每位玩家的猜測次數
         self.server_socket = None
@@ -29,6 +30,7 @@ class NumberGuessServer:
             try:
                 client_socket, addr = self.server_socket.accept()
                 self.clients.append(client_socket)
+                self.buffers.append("")
                 print(f"[猜數字對戰伺服器] 玩家 {connected_count+1} 已連線")
                 
                 try:
@@ -40,12 +42,36 @@ class NumberGuessServer:
                 except socket.error:
                     print(f"[猜數字對戰伺服器] 玩家連線中斷")
                     self.clients.remove(client_socket)
+                    self.buffers.pop()
                     client_socket.close()
             except Exception as e:
                 print(f"[猜數字對戰伺服器] 接受連線錯誤: {e}")
         
         print("[猜數字對戰伺服器] 遊戲開始！")
         self.run_game()
+
+    def recv_json(self, player_index):
+        """接收並解析 JSON 訊息"""
+        decoder = json.JSONDecoder()
+        while True:
+            buffer = self.buffers[player_index]
+            buffer = buffer.lstrip()
+            if buffer:
+                try:
+                    obj, index = decoder.raw_decode(buffer)
+                    self.buffers[player_index] = buffer[index:]
+                    return obj
+                except json.JSONDecodeError:
+                    pass
+            
+            try:
+                data = self.clients[player_index].recv(4096).decode()
+                if not data:
+                    return None
+                self.buffers[player_index] += data
+            except Exception as e:
+                print(f"[錯誤] 接收資料失敗: {e}")
+                return None
         
     def run_game(self):
         """執行遊戲邏輯"""
@@ -57,15 +83,9 @@ class NumberGuessServer:
                 "message": "請設定你的數字 (1-100)"
             }).encode())
             
-            data = self.clients[i].recv(4096).decode()
-            if not data:
+            message = self.recv_json(i)
+            if not message:
                 print(f"[猜數字對戰伺服器] 玩家 {i+1} 斷開連線")
-                return
-                
-            try:
-                message = json.loads(data)
-            except json.JSONDecodeError:
-                print(f"[錯誤] JSON 解析失敗: {data}")
                 return
                 
             if message["type"] == "number_set":
@@ -98,16 +118,10 @@ class NumberGuessServer:
             
             try:
                 # 接收猜測
-                data = self.clients[current_player].recv(4096).decode()
-                if not data:
+                message = self.recv_json(current_player)
+                if not message:
                     print(f"[猜數字對戰伺服器] 玩家 {current_player} 斷開連線")
                     break
-                    
-                try:
-                    message = json.loads(data)
-                except json.JSONDecodeError:
-                    print(f"[錯誤] JSON 解析失敗: {data}")
-                    continue
                 
                 if message["type"] == "guess":
                     guess = message["number"]
