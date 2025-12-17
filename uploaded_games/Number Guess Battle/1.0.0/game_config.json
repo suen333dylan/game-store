@@ -1,0 +1,12 @@
+{
+  "game_name": "Number Guess Battle",
+  "version": "1.0.0",
+  "author": "Game Developer",
+  "description": "雙人猜數字對戰遊戲，看誰先猜中對手的數字！",
+  "game_type": "gui",
+  "min_players": 2,
+  "max_players": 2,
+  "server_file": "game_server.py",
+  "client_file": "game_client.py",
+  "server_port": 5002
+}

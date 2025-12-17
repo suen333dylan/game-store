@@ -1,0 +1,12 @@
+{
+  "game_name": "Rock Paper Scissors",
+  "version": "1.0.0",
+  "author": "Game Developer",
+  "description": "多人石頭剪刀布大亂鬥！支援3人以上同時對戰",
+  "game_type": "cli",
+  "min_players": 3,
+  "max_players": 10,
+  "server_file": "game_server.py",
+  "client_file": "game_client.py",
+  "server_port": 5003
+}

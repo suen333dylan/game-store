@@ -1,0 +1,12 @@
+{
+  "game_name": "TicTacToe",
+  "version": "1.0.0",
+  "author": "Game Developer",
+  "description": "經典井字遊戲，雙人對戰",
+  "game_type": "cli",
+  "min_players": 2,
+  "max_players": 2,
+  "server_file": "game_server.py",
+  "client_file": "game_client.py",
+  "server_port": 5001
+}
