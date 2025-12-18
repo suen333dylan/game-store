@@ -224,10 +224,10 @@ class DeveloperClient:
             return
         
         # 輸入新版本號
-        new_version = input(f"請輸入新版本號 (當前: {game['version']}): ").strip()
-        if not new_version:
-            print("❌ 版本號不能為空")
-            return
+        # new_version = input(f"請輸入新版本號 (當前: {game['version']}): ").strip()
+        # if not new_version:
+        #     print("❌ 版本號不能為空")
+        #     return
         
         # 選擇遊戲檔案
         games_dir = "games"
@@ -250,7 +250,26 @@ class DeveloperClient:
             return
         
         game_dir = os.path.join(games_dir, game_folder)
+        config_file = os.path.join(game_dir, "game_config.json")
         
+        if not os.path.exists(config_file):
+            print(f"❌ 找不到遊戲配置檔: {config_file}")
+            return
+            
+        # 從配置檔讀取新版本號
+        with open(config_file, 'r', encoding='utf-8') as f:
+            game_config = json.load(f)
+            new_version = game_config.get("version")
+            
+        if not new_version:
+            print("❌ 配置檔中缺少版本號")
+            return
+            
+        if new_version == game['version']:
+            print(f"⚠️  警告：新版本號 ({new_version}) 與當前版本相同")
+            print("請先修改 game_config.json 中的版本號再更新")
+            return
+
         # 讀取遊戲檔案
         print("正在讀取遊戲檔案...")
         files = self.read_game_files(game_dir)
